@@ -1,76 +1,103 @@
 import React, { useState } from "react";
-import { View, StyleSheet, TextInput, Text, TouchableOpacity } from "react-native";
+import {
+  View,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  Image,
+  PermissionsAndroid,
+} from "react-native";
+import * as FileSystem from "expo-file-system";
+import * as MediaLibrary from "expo-media-library";
+import { Picker } from "@react-native-picker/picker";
+import * as Permissions from "expo-permissions";
 
 const UploadAudioScreen = () => {
-  const [weight, setWeight] = useState("");
-  const [height, setHeight] = useState("");
-  const [result, setResult] = useState(null);
-  const [indicatorColor, setIndicatorColor] = useState(null);
+  const [audioFile, setAudioFile] = useState(null);
+  const [audioType, setAudioType] = useState("mp3");
 
-  const getBMICategory = (bmi) => {
-    if (bmi < 18.5) {
-      return { category: 'Underweight', color: '#FF6347' };
-    } else if (bmi >= 18.5 && bmi < 25) {
-      return { category: 'Normal', color: '#32CD32' };
-    } else if (bmi >= 25 && bmi < 30) {
-      return { category: 'Overweight', color: '#FFA500' };
+  const handleAudioUpload = async () => {
+    if (audioFile) {
+      try {
+        const asset = await MediaLibrary.createAssetAsync(audioFile);
+        console.log("Audio file uploaded successfully:", asset.localUri);
+      } catch (error) {
+        console.error("Error uploading audio file:", error);
+      }
     } else {
-      return { category: 'Obese', color: '#FF0000' };
+      console.log("No audio file selected.");
     }
   };
 
-  const calculateBMI = () => {
-    // Check if weight and height are valid numbers
-    if (isNaN(parseFloat(weight)) || isNaN(parseFloat(height)) || weight <= 0 || height <= 0) {
-      setResult("Please enter valid weight and height");
-      return;
+  const pickFile = async () => {
+    try {
+      const granted = await Permissions.askAsync(
+        Permissions.AUDIO_RECORDING,
+        Permissions.MEDIA_LIBRARY
+      );
+
+      if (granted.status === "granted") {
+        const { uri } = await FileSystem.getInfoAsync({
+          type: "library",
+          allowsEditing: false,
+          multiple: false,
+          mimeType: "audio/*",
+        });
+
+        setAudioFile(uri);
+      } else {
+        console.log("Permissions not granted.");
+      }
+    } catch (err) {
+      if (err.name === "Cancel") {
+        // User cancelled the picker, no action needed
+      } else {
+        throw err;
+      }
     }
-
-    // Calculate BMI
-    const weightInKg = parseFloat(weight);
-    const heightInCm = parseFloat(height) / 100; // Convert height to meters
-    const bmi = weightInKg / (heightInCm * heightInCm);
-
-    const { category, color } = getBMICategory(bmi);
-
-    setResult(`Your BMI is: ${bmi.toFixed(2)}`);
-    setIndicatorColor(color);
   };
-  
+
   return (
     <View style={styles.container}>
       <View style={styles.frame}>
         <View style={styles.accent}>
           <View style={styles.BMIContainer}>
-            <Text style={styles.BMIGreet}>
-              Calculate your BMI
-            </Text>
+            <Text style={styles.BMIGreet}>Upload an Audio File</Text>
           </View>
         </View>
       </View>
       <View style={styles.fillOut}>
-        <TextInput
-          style={styles.input}
-          placeholder="Enter weight (kg)"
-          keyboardType="numeric"
-          value={weight}
-          onChangeText={(text) => setWeight(text)}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Enter height (cm)"
-          keyboardType="numeric"
-          value={height}
-          onChangeText={(text) => setHeight(text)}
-        />
-        <TouchableOpacity onPress={calculateBMI} style={styles.calculateButton}>
-          <Text style={styles.calculateText}>Calculate BMI</Text>
+        <Text style={styles.label}>Select an audio file:</Text>
+        <TouchableOpacity onPress={pickFile} style={styles.uploadImageContainer}>
+          {audioFile ? (
+            <Image
+              source={{
+                uri: audioFile,
+              }}
+              style={styles.uploadImage}
+            />
+          ) : (
+            <Image
+              source={require("../assets/UploadButton.png")}
+              style={styles.uploadImage}
+            />
+          )}
         </TouchableOpacity>
-        {result && (
-          <View style={[styles.resultContainer, { backgroundColor: indicatorColor }]}>
-            <Text style={styles.result}>{result}</Text>
-          </View>
-        )}
+
+        <Text style={styles.label}>Select audio type:</Text>
+        <Picker
+          style={styles.picker}
+          selectedValue={audioType}
+          onValueChange={(itemValue, itemIndex) => setAudioType(itemValue)}
+        >
+          <Picker.Item label="MP3" value="mp3" />
+          <Picker.Item label="WAV" value="wav" />
+          <Picker.Item label="M4A" value="m4a" />
+        </Picker>
+
+        <TouchableOpacity onPress={handleAudioUpload} style={styles.calculateButton}>
+          <Text style={styles.calculateText}>Upload Audio</Text>
+        </TouchableOpacity>
       </View>
     </View>
   );
@@ -100,12 +127,12 @@ const styles = StyleSheet.create({
   },
   BMIContainer: {
     marginTop: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
-  BMIGreet:{
-    color: 'white',
-    fontWeight: '500',
+  BMIGreet: {
+    color: "white",
+    fontWeight: "500",
     fontSize: 18,
   },
   fillOut: {
@@ -123,34 +150,42 @@ const styles = StyleSheet.create({
     paddingHorizontal: 40,
     paddingTop: 30,
   },
-  input: {
-    height: 40,
-    borderColor: 'gray',
+  label: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginTop: 20,
+  },
+  uploadImageContainer: {
+    width: 100,
+    height: 100,
+    alignSelf: "center",
+    marginTop: 20,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  uploadImage: {
+    width: 300,
+    height: 300,
+  },
+  picker: {
+    height: 50,
+    width: "100%",
+    borderColor: "gray",
     borderWidth: 1,
     borderRadius: 5,
     marginBottom: 20,
     paddingHorizontal: 10,
   },
   calculateButton: {
-    backgroundColor: '#0B3954',
+    backgroundColor: "#0B3954",
     borderRadius: 10,
     padding: 15,
-    alignItems: 'center',
+    alignItems: "center",
+    marginTop: 20,
   },
   calculateText: {
-    color: 'white',
-    fontWeight: 'bold',
-  },
-  resultContainer: {
-    marginTop: 20,
-    paddingVertical: 15,
-    borderRadius: 10,
-    alignItems: 'center',
-  },
-  result: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    textAlign: 'center',
+    color: "white",
+    fontWeight: "bold",
   },
 });
 

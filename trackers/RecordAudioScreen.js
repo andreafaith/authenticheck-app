@@ -1,356 +1,184 @@
-import React, { useState, useEffect } from 'react';
-import { View, StyleSheet, Text, TextInput, TouchableOpacity, Modal, 
-  Animated, Pressable, Image } from 'react-native';
+import React, { useState, useEffect, useRef } from "react";
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  Image,
+  Modal,
+  TextInput,
+  Button,
+} from "react-native";
+import { Audio } from "expo-av";
+import * as FileSystem from "expo-file-system";
+import { AntDesign } from "@expo/vector-icons";
+import AudioFilesScreen from "./AudioFilesScreen"; // Import AudioFileScreen
 
-const RecordAudioScreen = () => {
-  const [bottleSize, setBottleSize] = useState(250);
-  const [amountDrank, setAmountDrank] = useState(0);
-  const [numGlasses, setNumGlasses] = useState(0);
-  const [modalVisible, setModalVisible] = useState(false);
-  const [waveAnim] = useState(new Animated.Value(0));
-  const [customGoal, setCustomGoal] = useState(bottleSize * 8);
-  const [isEditingGoal, setIsEditingGoal] = useState(false);
-  const [drinkRecorded, setDrinkRecorded] = useState(false);
+export default function RecordAudioScreen({ navigation }) {
+  const [recording, setRecording] = useState();
+  const [audioName, setAudioName] = useState("No Audio");
+  const [audioUri, setAudioUri] = useState(null); // Add state for audio URI
 
-  const handleGoalEdit = () => {
-    setIsEditingGoal(!isEditingGoal);
-  };
-
-  const waveAnimation = () => {
-    return Animated.loop(
-      Animated.sequence([
-        Animated.timing(waveAnim, {
-          toValue: 15,
-          duration: 2000,
-          useNativeDriver: false,
-        }),
-        Animated.timing(waveAnim, {
-          toValue: 0,
-          duration: 2000,
-          useNativeDriver: false,
-        }),
-      ]),
-    );
-  };
-
-  useEffect(() => {
-    waveAnimation().start();
-  }, []);
-
-  const recordDrink = () => {
-    const newAmount = amountDrank + bottleSize;
-    setAmountDrank(newAmount);
-    const newGlasses = Math.floor(newAmount / 250); // Use 250 as the base amount for 1 glass
-    setNumGlasses(newGlasses);
-    setDrinkRecorded(true);
-
-    Animated.timing(waveAnim, {
-      toValue: (newAmount / (bottleSize * 8)) * 700,
-      duration: 500,
-      useNativeDriver: false,
-    }).start();
-  };
-
-  const minusDrink = () => {
-    if (amountDrank >= bottleSize) {
-      const newAmount = amountDrank - bottleSize;
-      setAmountDrank(newAmount);
-      const newGlasses = Math.floor(newAmount / 250); // Use 250 as the base amount for 1 glass
-      setNumGlasses(newGlasses);
-
-      Animated.timing(waveAnim, {
-        toValue: (newAmount / (bottleSize * 8)) * 700,
-        duration: 500,
-        useNativeDriver: false,
-      }).start();
+  const handleRecord = async () => {
+    try {
+      const { sound, status } = await Audio.Recording.createAsync();
+      setRecording(sound);
+      setAudioName(status.startingTime);
+    } catch (err) {
+      console.error("Failed to start recording", err);
     }
   };
 
-  const selectBottleSize = (size) => {
-    setBottleSize(size);
-    setModalVisible(false);
+  const handleDownload = async () => {
+    try {
+      const { uri } = await FileSystem.downloadAsync(`content://${audioUri}`, FileSystem.documentDirectory + `${Date.now()}-audio.mp3`);
+      console.log('Audio downloaded successfully', uri);
+    } catch (error) {
+      console.error('Error downloading audio', error);
+    }
+  };
+
+  const handleStop = async () => {
+    if (recording) {
+      recording.stopAndUnloadAsync();
+      setRecording(null);
+      setAudioName("Recording stopped");
+      const info = await FileSystem.getInfoAsync(recording.getURI());
+      setAudioUri(info.uri); // Set the audio URI
+      navigation.navigate("AudioFile", { audioUri: info.uri });
+    }
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.frame}>
-        <View style={styles.waterContainer}>
-          <Animated.View style={[styles.water, { height: waveAnim }]} />
-        </View>
-
-        <View style={styles.infoContainer}>
+        <View style={styles.accent}>
+          <Text style={styles.dailyGoalHeader}>Record Audio</Text>
           <View style={styles.goalContainer}>
-            {isEditingGoal ? (
-              <View style={styles.editGoalContainer}>
-                <TextInput
-                  style={styles.editGoalInput}
-                  keyboardType="numeric"
-                  value={String(customGoal)}
-                  onChangeText={(text) => setCustomGoal(parseInt(text) || 0)}
-                  onBlur={() => setIsEditingGoal(false)}
-                />
-              </View>
-            ) : (
-              <View style={styles.goalTextContainer}>
-                <Text style={styles.goalText}>Daily Goal: {customGoal} mL</Text>
-              </View>
-            )}
-            <TouchableOpacity onPress={handleGoalEdit}>
-              <Image source={require('../assets/edit-icon.png')} style={styles.editIcon} />
+            <Text style={styles.goalSteps}>{audioName}</Text>
+          </View>
+        </View>
+      </View>
+      <View style={styles.fillOut}>
+        <View style={styles.audioContainer}>
+          {!!recording ? (
+            <TouchableOpacity style={styles.stopButton} onPress={handleStop}>
+              <AntDesign name="stop" size={24} color="white" />
             </TouchableOpacity>
-          </View>
-          <Text>Amount Drank: {amountDrank} mL</Text>
-          <Text>Number of Glasses: {numGlasses}</Text>
-        </View>
-
-        <View style={styles.buttonsContainer}>
-          <TouchableOpacity style={styles.iconButton} onPress={minusDrink}>
-            <Image source={require('../assets/minus-icon.png')} style={styles.icon} />
-          </TouchableOpacity>
-          
-          <TouchableOpacity style={[styles.recordButton]} onPress={recordDrink}>
-          {(amountDrank === 0 || !drinkRecorded) && (
-            <View style={styles.arrowNote}>
-              <View style={styles.arrowBase}>
-                <Text style={styles.arrowText}>Tap Here to Record your Drink!</Text>
-              </View>
-              <View style={styles.arrow} />
-            </View>
+          ) : (
+            <TouchableOpacity style={styles.recordButton} onPress={handleRecord}>
+              <AntDesign name="mic" size={24} color="white" />
+            </TouchableOpacity>
           )}
-            <Image source={require('../assets/record-icon.png')} style={[styles.recordIcon]} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[styles.iconButton, styles.middleButton]}
-            onPress={() => setModalVisible(true)}
-          >
-            <Image source={require('../assets/bottle-icon.png')} style={styles.icon} />
-            <View style={styles.indicator}>
-              <Text style={styles.indicatorText}>{bottleSize} mL</Text>
-            </View>
-          </TouchableOpacity>
+          {audioUri && (
+            <Image
+              source={{ uri: `data:image/png;base64,${audioUri}` }}
+              style={styles.waveformImage}
+            />
+          )}
         </View>
-
-        <Modal
-          animationType="fade"
-          transparent={true}
-          visible={modalVisible}
-          onRequestClose={() => {
-            setModalVisible(!modalVisible);
-          }}
-        >
-          <View style={styles.centeredView}>
-            <View style={styles.modalView}>
-              <Pressable
-                style={styles.closeModal}
-                onPress={() => setModalVisible(!modalVisible)}
-              >
-                <Text style={styles.textStyle}>Close</Text>
-                <Text style={styles.textSelect}>Select Bottle Size</Text>
-              </Pressable>
-              <TouchableOpacity
-                style={styles.optionButton}
-                onPress={() => selectBottleSize(250)}
-              >
-                <Text>250 mL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.optionButton}
-                onPress={() => selectBottleSize(500)}
-              >
-                <Text>500 mL</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.optionButton}
-                onPress={() => selectBottleSize(750)}
-              >
-                <Text>750 mL</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </Modal>
+      </View>
+      <View style={styles.buttonContainer}>
+        <Button
+          title="Download"
+          onPress={handleDownload}
+          disabled={!audioUri}
+        />
+        <Button title="Upload" onPress={handleAudioUpload} disabled={!audioUri} />
       </View>
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    bottom: '0%',
+    backgroundColor: "#fff",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
   },
   frame: {
-    flex: 1,
-    position: 'relative',
-    backgroundColor: 'white',
+    width: "100%",
+    height: 150,
+    backgroundColor: "#F8F8F8",
+    borderRadius: 10,
+    marginTop: 30,
+    overflow: "hidden",
   },
-  waterContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
+  accent: {
+    backgroundColor: "#1F8EF1",
+    width: "100%",
+    height: "100%",
+    position: "absolute",
+    borderRadius: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+    flexDirection: "column",
+    justifyContent: "space-between",
   },
-  water: {
-    width: '100%',
-    backgroundColor: '#0B3954',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
-  infoContainer: {
-    alignItems: 'center',
-    backgroundColor: '#EEEEEE',
-    borderRadius: 20,
-    position: 'absolute',
-    width: 300,
-    top: 150,
-    left: 45,
-    right: 10,
-    paddingTop: 10,
-    paddingBottom: 10,
-    elevation: 10,
+  dailyGoalHeader: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "bold",
   },
   goalContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-
-  },
-  goalTextContainer: {
-
-  },
-  goalText: {
-    fontSize: 14,
-  },
-  editGoalContainer: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: 'gray',
-    borderRadius: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  editGoalInput: {
-    flex: 1,
-    fontSize: 14,
-  },
-  editIcon: {
-    width: 15,
-    height: 15,
-    marginLeft: 10,
-  },
-  buttonsContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-evenly',
-    backgroundColor: '#0B3954',
-    paddingTop: 10,
-    paddingBottom: 20,
-  },
-  iconButton: {
-    alignItems: 'center',
-    justifyContent: 'center'
-  },
-  icon: {
-    width: 40,
+    width: "100%",
     height: 40,
-  },
-  recordButton: {
-    alignItems: 'center',
-  },
-  recordIcon: {
-    width: 70,
-    height: 70,
-  },
-  arrowNote: {
-    position: 'absolute',
-    alignItems: 'center',
-    alignSelf: 'center',
-    bottom: 90,
-  },
-  arrow: {
-    width: 0,
-    height: 0,
-    backgroundColor: 'transparent',
-    borderStyle: 'solid',
-    borderLeftWidth: 10,
-    borderRightWidth: 10,
-    borderTopWidth: 20,
-    borderLeftColor: 'transparent',
-    borderRightColor: 'transparent',
-    borderTopColor: '#22FFEF',
-  },
-  arrowBase: {
-    width: 100,
-    height: 80,
-    backgroundColor: '#22FFEF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderBottomLeftRadius: 20,
-    borderBottomRightRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  arrowText: {
-    color: '#0B3954',
-    fontSize: 12,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  indicator: {
-    height: 10,
-    width: 40,
-    borderRadius: 10,
-    position: 'absolute',
-    bottom: -15,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  indicatorText: {
-    alignItems: 'center',
-    fontSize: 8,
-    fontWeight: 'bold',
-    color: 'white',
-  },
-  middleButton: {
-    alignSelf: 'center',
-  },
-  centeredView: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  modalView: {
-    margin: 20,
-    backgroundColor: '#0B3954',
-    borderRadius: 30,
-    padding: 35,
-    alignItems: 'center',
-    elevation: 10,
-  },
-  optionButton: {
-    backgroundColor: 'white',
+    backgroundColor: "#fff",
     borderRadius: 20,
-    padding: 10,
-    marginVertical: 5,
-    width: 200,
-    alignItems: 'center',
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
     elevation: 5,
   },
-  closeModal: {
-    alignSelf: 'center',
+  goalSteps: {
+    color: "#1F8EF1",
+    fontSize: 16,
+    fontWeight: "bold",
   },
-  textStyle: {
-    color: 'white',
-    fontWeight: 'bold',
-    textAlign: 'center',
+  fillOut: {
+    width: "100%",
+    alignItems: "center",
   },
-  textSelect: {
-    color: 'white',
-    paddingTop: 10,
+  audioContainer: {
+    width: "100%",
+    height: 200,
+    backgroundColor: "#F8F8F8",
+    borderRadius: 10,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    position: "relative",
+  },
+  recordButton: {
+    position: "absolute",
+    bottom: 20,
+    backgroundColor: "#1F8EF1",
+    padding: 10,
+    borderRadius: 50,
+  },
+  stopButton: {
+    position: "absolute",
+    bottom: 20,
+    backgroundColor: "#FF3B30",
+    padding: 10,
+    borderRadius: 50,
+  },
+  waveformImage: {
+    width: "100%",
+    height: "100%",
+    position: "absolute",
+  },
+  buttonContainer: {
+    width: "100%",
+    paddingHorizontal: 20,
+    marginBottom: 30,
   },
 });
-
-export default RecordAudioScreen;
